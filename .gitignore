@@ -1,0 +1,5 @@
+
+# ignore unnecessary files
+/glove
+/counter-fitted-vectors.txt
+/SimLex-999.txt
