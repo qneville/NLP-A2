@@ -51,8 +51,8 @@ class Q4B:
                 cfv_sim = cosine_similarity(self.cfv_df.ix[w1].values.reshape(1,-1), self.cfv_df.ix[w2].values.reshape(1,-1))[0][0]
                 cfv_list.append(cfv_sim)
         
-        print(spearmanr(simlex_list_gl, glove_list).correlation)
-        print(spearmanr(simlex_list_cfv, cfv_list).correlation)
+        print('Spearman correlation for Glove 50: {:.3}'.format(spearmanr(simlex_list_gl, glove_list).correlation))
+        print('Spearman correlation for Counter-Fitted Vectors: {:.3}'.format(spearmanr(simlex_list_cfv, cfv_list).correlation))
         
         
         
@@ -86,24 +86,19 @@ class Q4B:
         
         
         df.index = df.index.str.lower()
-#         df_filter = df.index.isin(list(self.vocab_set))
-#         df_filtered = df[df_filter]
-         
-        #df_filtered = pd.DataFrame(df.loc[df['Character'].isin(self.vocab_set)])
-         
-        #df[df.index.map(lambda x: x[0] in self.vocab_set)]
-#         df_norm = DataFrame(data=normalize(df), index=df.index)
-         
+        
         return df
+    
 def main():
     
-    q = Q4B()
-    
+    Q4B()
     
 if __name__ == '__main__':
     start_time = time.time()
-
+    
+    print("Executing Q4B...\n") 
+    
     main()
-
-    print("Calc time: %s s" % (time.time()-start_time)) 
+    print("--------------------------") 
+    print("Time Elapsed {:.5} seconds".format((time.time()-start_time))) 
     

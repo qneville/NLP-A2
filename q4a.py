@@ -11,86 +11,129 @@ from sklearn.preprocessing import normalize
 from sklearn.metrics.pairwise import cosine_similarity
 from nltk.metrics import spearman
 import time
+import sys
 
-class Analogy:
+class Q4A:
     
     def __init__(self):
         
-        self.master_analogies_path = "./questions-words.txt"
+        # Paths for files used
+        self.master_analogies_path = "./questions-words.txt" # ~19544 lines
         self.counter_fitted_path   = "./counter-fitted-vectors.txt"
         self.glove_50d_path        = "./glove/glove.6B.50d.txt"
         
+        # Used for metrics
+        self.cfv_metrics = { 'total_read' : 0, 'in_top_5' : 0, 'in_top_1' : 0 }
+        self.glove_metrics = { 'total_read' : 0, 'in_top_5' : 0, 'in_top_1' : 0 }
+
+        # Get list of vocab from questions for pre-filtering Glove and CFV         
         self.vocab_set = self.__get_vocab_set()
         
-        #cv = CountVectorizer()
-        
+        # Build Tables Needed
         self.questions = self.build_questions(self.master_analogies_path)
-        #self.cfv_df = self.build_norm_table(self.counter_fitted_path)
+        self.cfv_df = self.build_norm_table(self.counter_fitted_path)
         self.glove_df = self.build_norm_table(self.glove_50d_path)
         
-        # Do for all Counter-Fitted Vectors
+        # Do for all GLOVE_50 first
+        print("Processing GLOVE_50:")        
+        self.get_metrics(self.glove_metrics, self.glove_df, 0)       
         
-        top5match = 0;
+        # Print Info
+        print("Results:")
+        print("-----------------------------")
+        print("% Number of valid Question Analogies: {}".format(self.glove_metrics['total_read']))
+        print("% Number of top 5's: {}".format(self.glove_metrics['in_top_5']))
+        print("% Number of top 1's: {}".format(self.glove_metrics['in_top_1']))
+        print("\n")
+        
+        print("% Occurs in top 5: {:.3}%".format(self.glove_metrics['in_top_5']/self.glove_metrics['total_read']*100))
+        print("% Top result: {:.3}%".format(self.glove_metrics['in_top_1']/self.glove_metrics['total_read']*100))
+        print("-----------------------------\n\n")
+        
+        
+        print("Processing Counter-Fitted Vectors:")
+        self.get_metrics(self.cfv_metrics, self.cfv_df, 0)
+        print("Results:")
+        
+        print("-----------------------------")
+        print("% Number of valid Question Analogies: {}".format(self.cfv_metrics['total_read']))
+        print("% Number of top 5's: {}".format(self.cfv_metrics['in_top_5']))
+        print("% Number of top 1's: {}".format(self.cfv_metrics['in_top_1']))
+        print("")
+        print("% Occurs in top 5: {:.3}%".format(self.cfv_metrics['in_top_5']/self.cfv_metrics['total_read']*100))
+        print("% Top result: {:.3}%".format(self.cfv_metrics['in_top_1']/self.cfv_metrics['total_read']*100))
+        print("-----------------------------\n\n")
+        
+    
+    # Get totals necessary for percentages
+    def get_metrics(self, metrics, source, limit=0):
+        
+        self.update_progress(0);
+        
         y_a = {}
-        i = 0;
+        i=0
+        
         for x in self.questions.iterrows():
             Xa = x[1]['Xa'].lower()
             Xb = x[1]['Xb'].lower()
             Xc = x[1]['Xc'].lower()
             
-            # y will return null if any Xa, Xb, Xc not found
-            #y = self.__find_y(Xa, Xb, Xc)
-            y = self.__calc_y(Xa, Xb, Xc)#self.cfv_df.ix[Xa]-self.cfv_df.ix[Xb]+self.cfv_df.ix[Xc]
+            # Calculate Y vector
+            y = self.__calc_y(source, Xa, Xb, Xc)
             
+            # None of these words are missing from the Glove or CFV entries... Keep going.
             if y is not None:
-                y_a[i] = {-1: "garbage"}
-                for other in self.glove_df.iterrows():
+                
+                # Initialize empty dict here. 
+                y_a[i] = {}
+                
+                # Now loop through Glove and CFV
+                for other in source.iterrows():
+                    
+                    # Exclude Xa,Xb,Xc from maths
                     if other[0] not in [Xa, Xb, Xc]: 
-                        Y = y
-                        Y2D = Y.values.reshape(1,-1)
-                        X = other[1]
-                        X2D = X.values.reshape(1,-1)
                         
                         #Calculate cosine similarity and return top 5 and lowest for each y
-                        cos_sim2s = cosine_similarity(Y2D, X2D)[0][0]
+                        cos_sim2s = cosine_similarity(y.values.reshape(1,-1), other[1].values.reshape(1,-1))[0][0]
                         
                         y_a[i][cos_sim2s] = other[0] #cos_sim)
                     
             
                 # Report top 5 word vectors and if xD occurred.
-                #if (i < 505):
-                top5match += self.__get_print_top_5(x, y_a[i])
-                #else: 
-                   # print("Yo, start walking through code.")
-                #print("\t\t\t...{}...".format(i))
-                i += 1
+                self.__analyze_top_5(x, metrics, y_a[i])
                 
-                #if i%100 == 0:
-#                     print(i)
-                    
+                metrics['total_read'] += 1
+                i+=1
+                
+                if i%100 == 0:
+                    self.update_progress(i);
             
-            print("-----------------------------")
-            print("% Top 5 occurrences: {:.3}%".format(top5match/i*100))
             
+            # Testing limit for debug    
+            if limit is not 0 and i == limit:
+                break
+            
+            
+        
     # Return 1 if match found in top 5
-    def __get_print_top_5(self, x, answers_list ):
+    def __analyze_top_5(self, x, metrics, answers_list ):
         #print("Top 5: "+x[1]['Xa']+" => "+x[1]['Xb']+" : "+x[1]['Xc']+" => "+x[1]['Xd'])
         return_val = 0;
         rank_i = 0;
         for y in sorted(answers_list, reverse=True):
             if rank_i < 5:
                 ans = answers_list[sorted(answers_list, reverse = True)[rank_i]]
-                if(ans.lower() == x[1]['Xd'].lower()): return_val = 1
-                #print('\t\t{}: {}'.format(rank_i+1, ans))
+                if(ans.lower() == x[1]['Xd'].lower()): 
+                    metrics['in_top_5'] += 1
+                    if rank_i == 0: metrics['in_top_1'] += 1 
+            
             else:
                 break
             rank_i+=1;
-        
-        return return_val(spearman.ranks_from_sequence)
     
-    def __calc_y(self, Xa, Xb, Xc):
+    def __calc_y(self, source, Xa, Xb, Xc):
         try:
-            return self.glove_df.ix[Xb]-self.glove_df.ix[Xa]+self.glove_df.ix[Xc]
+            return source.ix[Xb]-source.ix[Xa]+source.ix[Xc]
             
         except:
             return None
@@ -113,6 +156,7 @@ class Analogy:
     
     def build_norm_table(self, path):
         
+        # Build table from either Glove or CFV
         df = pd.read_table(path, 
                             sep=" ", 
                             index_col = 0,
@@ -123,9 +167,6 @@ class Analogy:
         df_filter = df.index.isin(list(self.vocab_set))
         df_filtered = df[df_filter]
         
-        #df_filtered = pd.DataFrame(df.loc[df['Character'].isin(self.vocab_set)])
-        
-        #df[df.index.map(lambda x: x[0] in self.vocab_set)]
         df_norm = DataFrame(data=normalize(df_filtered), index=df_filtered.index)
         
         return df_norm
@@ -145,27 +186,23 @@ class Analogy:
                         vocab_array.append(word.lower().rstrip())
                     
         return set(vocab_array)
-    
+
+    # Adapted from StackOverflow question:
+    # https://stackoverflow.com/questions/3173320/text-progress-bar-in-the-console
+    def update_progress(self, progress_i):
+        print('Approx: {}/19000'.format(progress_i))
+
 def main():
     
-    
-    a = Analogy()    
-
-        #do something
-    # Normalize Something
-    
-    # Use this to establish a vocabulary
-    
-    # Fit GLOVE
-    
-    # Fit CounterFitted
+    # Run Everything    
+    Q4A()
     
     
 if __name__ == '__main__':
     start_time = time.time()
-
+    print"Executing Q4A..." 
     main()
 
-    print("Calc time: %s s" % (time.time()-start_time)) 
+    print("Total Time: {:.3} seconds".format(time.time()-start_time))
     
         
